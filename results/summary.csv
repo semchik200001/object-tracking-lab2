@@ -1,0 +1,7 @@
+video,mode,frames,found,found_pct,by_ref,by_guided,by_prev,mean_inliers,ms_per_frame
+mona-lisa,трекинг,558,557,99.8,146,150,261,35.8,26.3
+mona-lisa,только детекция,558,237,42.5,237,0,0,46.1,22.7
+mona-lisa-blur,трекинг,558,538,96.4,127,150,261,32.8,27.0
+mona-lisa-blur,только детекция,558,218,39.1,218,0,0,39.5,24.1
+mona-lisa-blur-extra-credit,трекинг,558,528,94.6,114,149,265,34.6,27.4
+mona-lisa-blur-extra-credit,только детекция,558,206,36.9,206,0,0,39.2,24.3
