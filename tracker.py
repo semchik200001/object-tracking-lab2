@@ -68,7 +68,9 @@ class SiftTracker:
         max_lost       — сколько кадров подряд без объекта помнить последний
                          удачный кадр и пытаться связаться с ним
         guided         — уточнять сцепленную гомографию по эталону
-        guided_radius  — радиус поиска пары вокруг прогноза, пиксели
+        guided_radius  — радиус поиска пары вокруг прогноза в пикселях кадра
+                         шириной 640; для других размеров масштабируется
+                         пропорционально ширине эталона
         guided_inliers — минимум inliers, чтобы принять уточнение
         """
         self.use_prev = use_prev
@@ -80,7 +82,6 @@ class SiftTracker:
         self.min_area = min_area
         self.max_lost = max_lost
         self.guided = guided
-        self.guided_radius = guided_radius
         self.guided_inliers = guided_inliers
 
         self.sift = cv2.SIFT_create()
@@ -91,6 +92,7 @@ class SiftTracker:
 
         ref_gray = _to_gray(reference)
         h, w = ref_gray.shape
+        self.guided_radius = guided_radius * w / 640
         self.ref_corners = np.float32([[0, 0], [w, 0], [w, h], [0, h]]).reshape(-1, 1, 2)
         self.ref_pts, self.ref_des = self._detect(ref_gray)
         if self.ref_des is None or len(self.ref_pts) < min_matches:

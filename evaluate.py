@@ -110,24 +110,47 @@ def drift_experiment(video, split=200, gt_inliers=30):
     return rows
 
 
-def compare_figure(video, modes, frames_to_show, path, label="Mona Lisa"):
-    """Сетка: строки — режимы трекера, столбцы — выбранные кадры."""
+def compare_figure(video, modes, frames_to_show, path, label="Mona Lisa", zoom=False):
+    """Сетка: строки — режимы трекера, столбцы — выбранные кадры.
+
+    zoom=True — вместо всего кадра показывается участок вокруг объекта
+    (по рамке последнего режима), одинаковый для всех строк: так виден
+    сдвиг рамки, когда объект далеко и мелкий.
+    """
     cap, frames = cv2.VideoCapture(video), []
     while (f := cap.read())[0] and len(frames) <= max(frames_to_show):
         frames.append(f[1])
-    rows = []
-    for title, params in modes:
+    cap.release()
+    results = []
+    for _, params in modes:
         tr = SiftTracker(frames[0], **params)
+        results.append({i: r for i, f in enumerate(frames)
+                        if (r := tr.process(f)) and i in frames_to_show})
+
+    rows = []
+    for (title, _), res_by_frame in zip(modes, results):
         tiles = []
-        for i, f in enumerate(frames):
-            res = tr.process(f)
-            if i in frames_to_show:
+        for i in frames_to_show:
+            f, res = frames[i], res_by_frame[i]
+            if zoom:
+                c = results[-1][i].corners
+                cx, cy = c.mean(axis=0)
+                half_w = max(np.ptp(c[:, 0]), np.ptp(c[:, 1]) * 16 / 9) * 0.8 + 10
+                x0 = int(np.clip(cx - half_w, 0, f.shape[1] - 2 * half_w))
+                y0 = int(np.clip(cy - half_w * 9 / 16, 0, f.shape[0] - 2 * half_w * 9 / 16))
+                crop = f[y0:y0 + int(2 * half_w * 9 / 16), x0:x0 + int(2 * half_w)]
+                tile = cv2.resize(crop, (320, 180), interpolation=cv2.INTER_CUBIC)
+                if res.found:
+                    k = 320 / crop.shape[1]
+                    quad = ((res.corners - [x0, y0]) * k).astype(np.int32).reshape(-1, 1, 2)
+                    cv2.polylines(tile, [quad], True, (0, 255, 0), 2, cv2.LINE_AA)
+            else:
                 tile = cv2.resize(draw(f, res, label, show_points=False), (320, 180))
-                text = f"{title}, кадр {i}" + ("" if res.found else ": не найден")
-                cv2.rectangle(tile, (0, 0), (320, 22), (255, 255, 255), -1)
-                cv2.putText(tile, text, (6, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
-                            (0, 0, 0), 1, cv2.LINE_AA)
-                tiles.append(tile)
+            text = f"{title}, кадр {i}" + ("" if res.found else ": не найден")
+            cv2.rectangle(tile, (0, 0), (320, 22), (255, 255, 255), -1)
+            cv2.putText(tile, text, (6, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
+                        (0, 0, 0), 1, cv2.LINE_AA)
+            tiles.append(tile)
         rows.append(np.hstack(tiles))
     cv2.imwrite(str(path), np.vstack(rows), [cv2.IMWRITE_JPEG_QUALITY, 88])
 
@@ -206,6 +229,12 @@ def main():
                        [("сцепка", dict(strong_inliers=10 ** 9, guided=False)),
                         ("сцепка + guided", dict(strong_inliers=10 ** 9))],
                        [100, 250, 400, 435], OUT / "compare_drift.jpg")
+    elif Path(args.videos[0]).stem == "kar-karych":
+        # Собственное видео: кадры, где одна сцепка уезжает сильнее всего
+        compare_figure(args.videos[0],
+                       [("сцепка", dict(strong_inliers=10 ** 9, guided=False)),
+                        ("сцепка + guided", dict(strong_inliers=10 ** 9))],
+                       [300, 347, 482, 505], OUT / "compare_drift_kar-karych.jpg", zoom=True)
     print()
     for row in summary + drift:
         print(row)
