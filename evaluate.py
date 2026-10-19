@@ -39,7 +39,7 @@ def ffmpeg(*args):
     subprocess.run(["ffmpeg", "-v", "error", "-y", *args], check=True)
 
 
-def make_media(raw, name):
+def make_media(raw, name, n_frames):
     """H.264-видео, GIF-превью и сетка кадров из сырого результата."""
     mp4, gif, grid = OUT / f"{name}.mp4", OUT / f"{name}.gif", OUT / f"{name}_grid.jpg"
     ffmpeg("-i", str(raw), "-c:v", "libx264", "-crf", "28", "-preset", "slow",
@@ -49,8 +49,14 @@ def make_media(raw, name):
            "select='not(mod(n,4))',setpts=N/8/TB,scale=288:-1:flags=lanczos,"
            "split[a][b];[a]palettegen=max_colors=64[p];[b][p]paletteuse=dither=none",
            "-r", "8", str(gif))
-    # Сетка 4×3 из равномерно взятых кадров
-    ffmpeg("-i", str(mp4), "-vf", "select='not(mod(n,47))',scale=320:-1,tile=4x3",
+    # Сетка из 12 равномерно взятых кадров: 4×3 для горизонтального видео,
+    # 6×2 для вертикального
+    cap = cv2.VideoCapture(str(raw))
+    portrait = cap.get(cv2.CAP_PROP_FRAME_HEIGHT) > cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+    cap.release()
+    step = n_frames // 12 + 1
+    layout = "scale=200:-1,tile=6x2" if portrait else "scale=320:-1,tile=4x3"
+    ffmpeg("-i", str(mp4), "-vf", f"select='not(mod(n,{step}))',{layout}",
            "-frames:v", "1", "-q:v", "3", str(grid))
     raw.unlink()
 
@@ -153,6 +159,7 @@ def plot_timeline(all_rows, path):
                 color=orange, lw=1.2, label="inliers при трекинге (сцепка / guided)")
         ax.axhline(25, color="#52514e", lw=0.8, ls="--")
         ax.set_yscale("symlog", linthresh=10)
+        ax.set_ylim(bottom=0)
         ax.set_title(name, loc="left", fontsize=10, color="#0b0b0b")
         ax.set_ylabel("пар")
         for s in ("top", "right"):
@@ -180,7 +187,7 @@ def main():
         name = Path(v).stem
         raw = OUT / f"{name}_raw.mp4"
         rows = track_video(v, raw, args.label, csv_path=OUT / f"{name}.csv")
-        make_media(raw, name)
+        make_media(raw, name, len(rows))
         all_rows[name] = rows
         summary.append(dict(video=name, mode="трекинг", **stats(rows)))
         det = track_video(v, None, args.label, use_prev=False, verbose=False)
