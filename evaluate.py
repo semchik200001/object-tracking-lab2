@@ -189,7 +189,7 @@ def plot_timeline(all_rows, path):
             ax.spines[s].set_visible(False)
         ax.grid(axis="y", color="#e8e7e3", lw=0.6)
     axes[0].legend(loc="upper right", frameon=False, fontsize=8, ncol=2)
-    axes[-1].set_xlabel("номер кадра  (серым — объект не найден, пунктир — порог 25 inliers)")
+    axes[-1].set_xlabel("номер кадра  (серым: объект не найден, пунктир: порог 25 inliers)")
     fig.tight_layout()
     fig.savefig(path, dpi=130)
     plt.close(fig)
