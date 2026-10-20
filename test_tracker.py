@@ -136,3 +136,17 @@ def test_forgets_after_max_lost():
     assert tr.prev_H is not None
     tr.process(texture(13, contrast=0.4))
     assert tr.prev_H is None
+
+
+def test_guided_rejects_blown_up_frame():
+    """Уточнение, у которого один угол улетел или рамка схлопнулась,
+    отбрасывается; небольшой сдвиг рамки принимается."""
+    tr = SiftTracker(REF)
+    r = tr.guided_radius
+    pred = quad(W / 2, H / 2, 0.5, 10)
+    assert tr._close(pred + [0.5 * r, -0.3 * r], pred)
+    flown = pred.copy()
+    flown[3] += [-3 * r, 3 * r]
+    assert not tr._close(flown, pred)
+    collapsed = (pred - pred.mean(axis=0)) * [1.0, 0.6] + pred.mean(axis=0)
+    assert not tr._close(collapsed, pred)

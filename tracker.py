@@ -53,7 +53,8 @@ class _Estimate:
 class SiftTracker:
     def __init__(self, reference, use_prev=True, ratio=0.75, ransac_thresh=5.0,
                  min_matches=10, min_inliers=10, strong_inliers=25, min_area=0.002,
-                 max_lost=15, guided=True, guided_radius=25.0, guided_inliers=15):
+                 max_lost=15, guided=True, guided_radius=25.0, guided_inliers=15,
+                 guided_area=1.25):
         """
         reference      — эталонное изображение объекта (BGR или серое)
         use_prev       — использовать сопоставление с прошлым кадром
@@ -72,6 +73,7 @@ class SiftTracker:
                          шириной 640; для других размеров масштабируется
                          пропорционально ширине эталона
         guided_inliers — минимум inliers, чтобы принять уточнение
+        guided_area    — во сколько раз уточнение может изменить площадь рамки
         """
         self.use_prev = use_prev
         self.ratio = ratio
@@ -83,6 +85,7 @@ class SiftTracker:
         self.max_lost = max_lost
         self.guided = guided
         self.guided_inliers = guided_inliers
+        self.guided_area = guided_area
 
         self.sift = cv2.SIFT_create()
         # Полный перебор по евклидовой метрике: точек немного (сотни), поэтому
@@ -135,10 +138,7 @@ class SiftTracker:
             if res is not None and self.guided:
                 g = self._guided(res.H, pts, des)
                 refined = self._accept(g, None, gray.shape, "guided", self.guided_inliers)
-                # Пары искались рядом с прогнозом, поэтому честное уточнение
-                # не может сдвинуть рамку дальше радиуса поиска
-                if refined is not None and np.linalg.norm(
-                        refined.corners - res.corners, axis=1).mean() < self.guided_radius:
+                if refined is not None and self._close(refined.corners, res.corners):
                     res = refined
 
         # 4. Прошлого кадра нет или он не помог — слабая детекция по эталону
@@ -182,6 +182,19 @@ class SiftTracker:
             return _Estimate(None, len(good), 0, none.dst_inliers)
         mask = mask.ravel().astype(bool)
         return _Estimate(H, len(good), int(mask.sum()), dst[mask].reshape(-1, 2))
+
+    def _close(self, refined, predicted):
+        """Уточнение похоже на прогноз: пары искались рядом с ним, поэтому
+        честное уточнение лишь слегка сдвигает рамку. Если точки уточнения
+        сгрудились в одной части объекта, дальние углы получаются
+        экстраполяцией, и рамка раздувается или схлопывается. Такое
+        уточнение отбрасывается: каждый угол сдвинулся не больше чем на два
+        радиуса поиска, площадь изменилась не больше чем в guided_area раз."""
+        shift = np.linalg.norm(refined - predicted, axis=1).max()
+        area = (cv2.contourArea(refined.astype(np.float32))
+                / cv2.contourArea(predicted.astype(np.float32)))
+        return (shift < 2 * self.guided_radius
+                and 1 / self.guided_area <= area <= self.guided_area)
 
     def _guided(self, H_pred, pts, des):
         """Сопоставление с эталоном в окрестности прогноза H_pred."""

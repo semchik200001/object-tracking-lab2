@@ -5,3 +5,5 @@ __pycache__/
 CLAUDE.md
 results/*_raw.mp4
 data/simple_track.avi
+out*.mp4
+out*.csv
